@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>留言交流平台</title>
+    <style>
+        /* 基礎全域設定，打造類似 Threads 的簡約風格 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #fafafa;
+            color: #101010;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px; /* 限制最大寬度，手機與電腦看起來都舒服 */
+        }
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        /* 發文區塊樣式 */
+        .post-form {
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .input-group {
+            margin-bottom: 12px;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            box-sizing: border-box;
+            background-color: #f9f9f9;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        input[type="file"] {
+            font-size: 14px;
+            color: #666;
+        }
+        button {
+            width: 100%;
+            background-color: #000000;
+            color: #ffffff;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        /* 留言列表區塊樣式 */
+        .feed {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .post-card {
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .post-author {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .post-time {
+            font-size: 12px;
+            color: #888;
+        }
+        .post-content {
+            font-size: 15px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            white-space: pre-wrap; /* 保留換行符號 */
+        }
+        .post-image {
+            max-width: 100%;
+            border-radius: 12px;
+            border: 1px solid #eee;
+        }
+        .loading {
+            text-align: center;
+            color: #888;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>討論區</h1>
+
+    <div class="post-form">
+        <div class="input-group">
+            <input type="text" id="authorName" placeholder="你的名字 (必填)">
+        </div>
+        <div class="input-group">
+            <textarea id="postContent" placeholder="想說些什麼... (必填)"></textarea>
+        </div>
+        <div class="input-group">
+            <input type="file" id="postImage" accept="image/*">
+        </div>
+        <button id="submitBtn" onclick="submitPost()">發佈</button>
+    </div>
+
+    <div id="feed" class="feed">
+        <div class="loading">載入留言中...</div>
+    </div>
+</div>
+
+<script>
+    // 🔴 這裡非常重要！請將下方的網址替換成你的 Google Apps Script 部署網址
+//    const API_URL = "請把你的_Web_App_URL_貼在這裡";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxnUvONekVx1YXHwFVgFv6v-TQFZqPUt0tIIuQ5kAsTo91RnJosX1gc70LhesmBzD-x/exec";
+
+    // 網頁載入時，自動抓取歷史留言
+    window.onload = function() {
+        loadPosts();
+    };
+
+    // 讀取留言的函式
+    async function loadPosts() {
+        const feedDiv = document.getElementById('feed');
+        
+        try {
+            const response = await fetch(API_URL);
+            const result = await response.json();
+
+            if (result.status === "success") {
+                feedDiv.innerHTML = ''; // 清空載入中文字
+                const posts = result.data;
+
+                if (posts.length === 0) {
+                    feedDiv.innerHTML = '<div class="loading">目前還沒有人發文，搶頭香吧！</div>';
+                    return;
+                }
+
+                // 產生每一篇留言的 HTML 卡片
+                posts.forEach(post => {
+                    const dateObj = new Date(post.timestamp);
+                    const timeString = dateObj.toLocaleString('zh-TW'); // 轉換成本地時間格式
+
+                    let imageHtml = '';
+                    if (post.imageUrl) {
+                        imageHtml = `<img src="${post.imageUrl}" class="post-image" alt="上傳的圖片">`;
+                    }
+
+                    const cardHtml = `
+                        <div class="post-card">
+                            <div class="post-header">
+                                <span class="post-author">${escapeHtml(post.name)}</span>
+                                <span class="post-time">${timeString}</span>
+                            </div>
+                            <div class="post-content">${escapeHtml(post.content)}</div>
+                            ${imageHtml}
+                        </div>
+                    `;
+                    feedDiv.innerHTML += cardHtml;
+                });
+            } else {
+                feedDiv.innerHTML = `<div class="loading">讀取失敗：${result.message}</div>`;
+            }
+        } catch (error) {
+            feedDiv.innerHTML = '<div class="loading">網路錯誤或尚未設定後端網址。</div>';
+        }
+    }
+
+    // 發佈留言的函式
+    async function submitPost() {
+        const nameInput = document.getElementById('authorName').value.trim();
+        const contentInput = document.getElementById('postContent').value.trim();
+        const imageFile = document.getElementById('postImage').files[0];
+        const submitBtn = document.getElementById('submitBtn');
+
+        // 檢查必填欄位
+        if (!nameInput || !contentInput) {
+            alert("請填寫名字和內容喔！");
+            return;
+        }
+
+        // 鎖定按鈕避免重複點擊
+        submitBtn.disabled = true;
+        submitBtn.innerText = "發佈中...";
+
+        try {
+            let base64Image = "";
+            let imageName = "";
+
+            // 如果有選擇圖片，將圖片轉成 Base64 格式
+            if (imageFile) {
+                // 限制檔案大小 (範例：5MB)
+                if (imageFile.size > 5 * 1024 * 1024) {
+                    alert("圖片檔案過大，請選擇小於 5MB 的圖片。");
+                    resetForm();
+                    return;
+                }
+                base64Image = await convertFileToBase64(imageFile);
+                imageName = imageFile.name;
+            }
+
+            // 準備要送給後端的資料
+            const payload = {
+                name: nameInput,
+                content: contentInput,
+                image: base64Image,
+                imageName: imageName
+            };
+
+            // 發送 POST 請求給 Apps Script
+            const response = await fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify(payload),
+                // 由於跨網域問題，GAS 必須使用 text/plain 而不是 application/json
+                headers: { "Content-Type": "text/plain;charset=utf-8" } 
+            });
+
+            const result = await response.json();
+
+            if (result.status === "success") {
+                // 發文成功，清空表單並重新讀取留言
+                document.getElementById('postContent').value = '';
+                document.getElementById('postImage').value = '';
+                // 不清空名字，讓使用者下次不用重打
+                loadPosts(); 
+            } else {
+                alert("發佈失敗：" + result.message);
+            }
+        } catch (error) {
+            alert("發生錯誤，請檢查網路連線或 API 網址設定。");
+        }
+
+        resetForm();
+    }
+
+    // 恢復按鈕狀態
+    function resetForm() {
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = false;
+        submitBtn.innerText = "發佈";
+    }
+
+    // 將檔案轉為 Base64 字串的輔助函式
+    function convertFileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    // 預防 XSS 攻擊的安全過濾函式
+    function escapeHtml(unsafe) {
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+</script>
+
+</body>
+</html>
