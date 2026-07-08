@@ -156,7 +156,8 @@
         const feedDiv = document.getElementById('feed');
         
         try {
-            const response = await fetch(API_URL);
+//            const response = await fetch(API_URL);
+            const response = await fetch(API_URL, { redirect: "follow" });
             const result = await response.json();
 
             if (result.status === "success") {
