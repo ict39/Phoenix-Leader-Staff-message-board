@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>留言交流平台</title>
     <style>
-        /* 基礎全域設定，打造類似 Threads 的簡約風格 */
+        /* 基礎全域設定 */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #fafafa;
             color: #101010;
             margin: 0;
-            padding: 20px;
+            padding: 20px 10px;
             display: flex;
             justify-content: center;
         }
         .container {
             width: 100%;
-            max-width: 600px; /* 限制最大寬度，手機與電腦看起來都舒服 */
+            max-width: 600px;
         }
         h1 {
             text-align: center;
@@ -50,11 +50,13 @@
             min-height: 80px;
             font-family: inherit;
         }
-        input[type="file"] {
+        /* 美化檔案上傳 */
+        .file-input-wrapper {
             font-size: 14px;
             color: #666;
+            margin-bottom: 12px;
         }
-        button {
+        button.primary-btn {
             width: 100%;
             background-color: #000000;
             color: #ffffff;
@@ -66,14 +68,10 @@
             cursor: pointer;
             transition: opacity 0.2s;
         }
-        button:hover {
-            opacity: 0.8;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        /* 留言列表區塊樣式 */
+        button.primary-btn:hover { opacity: 0.8; }
+        button.primary-btn:disabled { background-color: #cccccc; cursor: not-allowed; }
+        
+        /* 留言列表區塊樣式 - Threads 風格 */
         .feed {
             display: flex;
             flex-direction: column;
@@ -85,16 +83,27 @@
             border-radius: 16px;
             padding: 16px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+            position: relative;
+        }
+        /* 子留言的縮排與左側連接線 */
+        .reply-thread {
+            margin-top: 12px;
+            margin-left: 12px;
+            padding-left: 16px;
+            border-left: 2px solid #e8e8e8;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
         .post-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .post-author {
             font-weight: bold;
-            font-size: 16px;
+            font-size: 15px;
         }
         .post-time {
             font-size: 12px;
@@ -104,18 +113,51 @@
             font-size: 15px;
             line-height: 1.5;
             margin-bottom: 12px;
-            white-space: pre-wrap; /* 保留換行符號 */
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        /* 多圖片網格樣式 */
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
         }
         .post-image {
-            max-width: 100%;
-            border-radius: 12px;
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
             border: 1px solid #eee;
         }
-        .loading {
-            text-align: center;
-            color: #888;
-            padding: 20px;
+        /* 動作按鈕 (回覆) */
+        .action-bar {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 8px;
         }
+        .reply-btn {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 0;
+        }
+        .reply-btn:hover { color: #000; }
+        
+        /* 隱藏/展開的回覆表單 */
+        .reply-form-container {
+            display: none;
+            margin-top: 12px;
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+        .reply-form-container.active { display: block; }
+        .loading { text-align: center; color: #888; padding: 20px; }
     </style>
 </head>
 <body>
@@ -123,73 +165,55 @@
 <div class="container">
     <h1>討論區</h1>
 
+    <!-- 主發文表單 -->
     <div class="post-form">
         <div class="input-group">
-            <input type="text" id="authorName" placeholder="你的名字 (必填)">
+            <input type="text" id="mainName" placeholder="你的名字 (必填)">
         </div>
         <div class="input-group">
-            <textarea id="postContent" placeholder="想說些什麼... (必填)"></textarea>
+            <textarea id="mainContent" placeholder="建立新的串文... (必填)"></textarea>
         </div>
-        <div class="input-group">
-            <input type="file" id="postImage" accept="image/*">
+        <div class="file-input-wrapper">
+            <!-- 加上 multiple 屬性允許選取多張圖片 -->
+            <input type="file" id="mainImage" accept="image/*" multiple>
+            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖上傳，每張請小於 5MB)</div>
         </div>
-        <button id="submitBtn" onclick="submitPost()">發佈</button>
+        <button id="mainSubmitBtn" class="primary-btn" onclick="submitPost('', 'main')">發佈主串文</button>
     </div>
 
+    <!-- 留言列表區塊 -->
     <div id="feed" class="feed">
         <div class="loading">載入留言中...</div>
     </div>
 </div>
 
 <script>
-    // 🔴 這裡非常重要！請將下方的網址替換成你的 Google Apps Script 部署網址
-//    const API_URL = "請把你的_Web_App_URL_貼在這裡";
+    // 🔴 請將下方的網址替換成你的新版 Google Apps Script 部署網址
     const API_URL = "https://script.google.com/macros/s/AKfycbxnUvONekVx1YXHwFVgFv6v-TQFZqPUt0tIIuQ5kAsTo91RnJosX1gc70LhesmBzD-x/exec";
 
-    // 網頁載入時，自動抓取歷史留言
-    window.onload = function() {
-        loadPosts();
-    };
+    window.onload = function() { loadPosts(); };
 
-    // 讀取留言的函式
+    // 讀取並渲染留言
     async function loadPosts() {
         const feedDiv = document.getElementById('feed');
-        
         try {
-//            const response = await fetch(API_URL);
             const response = await fetch(API_URL, { redirect: "follow" });
             const result = await response.json();
 
             if (result.status === "success") {
-                feedDiv.innerHTML = ''; // 清空載入中文字
                 const posts = result.data;
-
                 if (posts.length === 0) {
                     feedDiv.innerHTML = '<div class="loading">目前還沒有人發文，搶頭香吧！</div>';
                     return;
                 }
-
-                // 產生每一篇留言的 HTML 卡片
-                posts.forEach(post => {
-                    const dateObj = new Date(post.timestamp);
-                    const timeString = dateObj.toLocaleString('zh-TW'); // 轉換成本地時間格式
-
-                    let imageHtml = '';
-                    if (post.imageUrl) {
-                        imageHtml = `<img src="${post.imageUrl}" class="post-image" alt="上傳的圖片">`;
-                    }
-
-                    const cardHtml = `
-                        <div class="post-card">
-                            <div class="post-header">
-                                <span class="post-author">${escapeHtml(post.name)}</span>
-                                <span class="post-time">${timeString}</span>
-                            </div>
-                            <div class="post-content">${escapeHtml(post.content)}</div>
-                            ${imageHtml}
-                        </div>
-                    `;
-                    feedDiv.innerHTML += cardHtml;
+                
+                // 1. 將平坦的資料轉換為樹狀結構 (找出主串與其回覆)
+                const tree = buildTree(posts);
+                // 2. 渲染樹狀結構
+                feedDiv.innerHTML = '';
+                // 將主串文倒序排列 (最新的在最上面)
+                tree.reverse().forEach(post => {
+                    feedDiv.appendChild(createPostNode(post, 1));
                 });
             } else {
                 feedDiv.innerHTML = `<div class="loading">讀取失敗：${result.message}</div>`;
@@ -199,81 +223,175 @@
         }
     }
 
-    // 發佈留言的函式
-    async function submitPost() {
-        const nameInput = document.getElementById('authorName').value.trim();
-        const contentInput = document.getElementById('postContent').value.trim();
-        const imageFile = document.getElementById('postImage').files[0];
-        const submitBtn = document.getElementById('submitBtn');
+    // 建立樹狀結構的演算法
+    function buildTree(posts) {
+        const map = {};
+        const roots = [];
+        posts.forEach(p => { map[p.id] = { ...p, children: [] }; });
+        posts.forEach(p => {
+            if (p.parentId && map[p.parentId]) {
+                map[p.parentId].children.push(map[p.id]);
+            } else {
+                roots.push(map[p.id]);
+            }
+        });
+        return roots;
+    }
 
-        // 檢查必填欄位
-        if (!nameInput || !contentInput) {
-            alert("請填寫名字和內容喔！");
-            return;
+    // 遞迴產生貼文 DOM 節點 (最多三層)
+    function createPostNode(post, depth) {
+        const wrapper = document.createElement('div');
+        // 主留言用卡片包裝，子留言則顯示為線程
+        if (depth === 1) {
+            wrapper.className = 'post-card';
+        } else {
+            wrapper.className = 'reply-thread';
         }
 
-        // 鎖定按鈕避免重複點擊
+        const dateObj = new Date(post.timestamp);
+        const timeString = isNaN(dateObj) ? '' : dateObj.toLocaleString('zh-TW');
+
+        // 處理多圖片網格
+        let galleryHtml = '';
+        if (post.images && post.images.length > 0) {
+            galleryHtml = '<div class="image-gallery">';
+            post.images.forEach(url => {
+                galleryHtml += `<img src="${url}" class="post-image" alt="附圖">`;
+            });
+            galleryHtml += '</div>';
+        }
+
+        // 只有層級 1 和 2 可以回覆 (產生第 2 和第 3 層)
+        let replyButtonHtml = '';
+        let replyFormHtml = '';
+        if (depth < 3) {
+            replyButtonHtml = `<div class="action-bar"><button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button></div>`;
+            replyFormHtml = `
+                <div class="reply-form-container" id="reply-form-${post.id}">
+                    <div class="input-group">
+                        <input type="text" id="replyName-${post.id}" placeholder="你的名字">
+                    </div>
+                    <div class="input-group">
+                        <textarea id="replyContent-${post.id}" placeholder="回覆 ${escapeHtml(post.name)}..."></textarea>
+                    </div>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="replyImage-${post.id}" accept="image/*" multiple>
+                    </div>
+                    <button class="primary-btn" id="btn-${post.id}" onclick="submitPost('${post.id}', 'reply-${post.id}')">送出回覆</button>
+                </div>
+            `;
+        }
+
+        const coreContent = `
+            <div class="post-header">
+                <span class="post-author">${escapeHtml(post.name)}</span>
+                <span class="post-time">${timeString}</span>
+            </div>
+            <div class="post-content">${escapeHtml(post.content)}</div>
+            ${galleryHtml}
+            ${replyButtonHtml}
+            ${replyFormHtml}
+        `;
+        
+        wrapper.innerHTML = coreContent;
+
+        // 若有子留言，遞迴渲染並接在下方
+        if (post.children && post.children.length > 0) {
+            const childrenWrapper = document.createElement('div');
+            post.children.forEach(child => {
+                childrenWrapper.appendChild(createPostNode(child, depth + 1));
+            });
+            wrapper.appendChild(childrenWrapper);
+        }
+
+        return wrapper;
+    }
+
+    // 展開/收合回覆表單
+    function toggleReplyForm(postId) {
+        const form = document.getElementById(`reply-form-${postId}`);
+        if (form.classList.contains('active')) {
+            form.classList.remove('active');
+        } else {
+            // 自動帶入主表單的名字，免得一直重打
+            const mainName = document.getElementById('mainName').value;
+            if(mainName) document.getElementById(`replyName-${postId}`).value = mainName;
+            form.classList.add('active');
+        }
+    }
+
+    // 統一發文函式 (處理主發文與回覆)
+    async function submitPost(parentId, prefix) {
+        let nameId, contentId, imageId, btnId;
+        
+        // 判斷是主發文還是回覆
+        if (prefix === 'main') {
+            nameId = 'mainName'; contentId = 'mainContent'; imageId = 'mainImage'; btnId = 'mainSubmitBtn';
+        } else {
+            nameId = `replyName-${parentId}`; contentId = `replyContent-${parentId}`; imageId = `replyImage-${parentId}`; btnId = `btn-${parentId}`;
+        }
+
+        const nameInput = document.getElementById(nameId).value.trim();
+        const contentInput = document.getElementById(contentId).value.trim();
+        const imageFiles = document.getElementById(imageId).files;
+        const submitBtn = document.getElementById(btnId);
+
+        if (!nameInput || !contentInput) {
+            alert("請填寫名字和內容喔！"); return;
+        }
+
         submitBtn.disabled = true;
-        submitBtn.innerText = "發佈中...";
+        submitBtn.innerText = "上傳發佈中...";
 
         try {
-            let base64Image = "";
-            let imageName = "";
-
-            // 如果有選擇圖片，將圖片轉成 Base64 格式
-            if (imageFile) {
-                // 限制檔案大小 (範例：5MB)
-                if (imageFile.size > 5 * 1024 * 1024) {
-                    alert("圖片檔案過大，請選擇小於 5MB 的圖片。");
-                    resetForm();
+            let processedImages = [];
+            // 處理多檔案
+            for (let i = 0; i < imageFiles.length; i++) {
+                const file = imageFiles[i];
+                if (file.size > 5 * 1024 * 1024) {
+                    alert(`圖片 ${file.name} 過大，請選擇小於 5MB 的圖片。`);
+                    submitBtn.disabled = false; submitBtn.innerText = "發佈";
                     return;
                 }
-                base64Image = await convertFileToBase64(imageFile);
-                imageName = imageFile.name;
+                const base64 = await convertFileToBase64(file);
+                processedImages.push({ name: file.name, base64: base64 });
             }
 
-            // 準備要送給後端的資料
             const payload = {
+                parentId: parentId,
                 name: nameInput,
                 content: contentInput,
-                image: base64Image,
-                imageName: imageName
+                images: processedImages
             };
 
-            // 發送 POST 請求給 Apps Script
             const response = await fetch(API_URL, {
                 method: "POST",
                 body: JSON.stringify(payload),
-                // 由於跨網域問題，GAS 必須使用 text/plain 而不是 application/json
                 headers: { "Content-Type": "text/plain;charset=utf-8" } 
             });
 
             const result = await response.json();
 
             if (result.status === "success") {
-                // 發文成功，清空表單並重新讀取留言
-                document.getElementById('postContent').value = '';
-                document.getElementById('postImage').value = '';
-                // 不清空名字，讓使用者下次不用重打
+                // 清空內容，保留名字
+                document.getElementById(contentId).value = '';
+                document.getElementById(imageId).value = '';
+                // 將名字同步到最上面，方便使用者
+                document.getElementById('mainName').value = nameInput;
+                
+                // 重新讀取畫面
                 loadPosts(); 
             } else {
                 alert("發佈失敗：" + result.message);
+                submitBtn.disabled = false; submitBtn.innerText = "發佈";
             }
         } catch (error) {
-            alert("發生錯誤，請檢查網路連線或 API 網址設定。");
+            alert("發生錯誤，請檢查網路或 API 網址設定。");
+            submitBtn.disabled = false; submitBtn.innerText = "發佈";
         }
-
-        resetForm();
     }
 
-    // 恢復按鈕狀態
-    function resetForm() {
-        const submitBtn = document.getElementById('submitBtn');
-        submitBtn.disabled = false;
-        submitBtn.innerText = "發佈";
-    }
-
-    // 將檔案轉為 Base64 字串的輔助函式
+    // 檔案轉 Base64
     function convertFileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -283,14 +401,8 @@
         });
     }
 
-    // 預防 XSS 攻擊的安全過濾函式
     function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
+        return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 </script>
 
