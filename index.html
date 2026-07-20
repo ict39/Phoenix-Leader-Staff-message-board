@@ -51,7 +51,7 @@
             min-height: 80px;
             font-family: inherit;
         }
-        
+
         /* 檔案上傳與按鈕 */
         .file-input-wrapper {
             font-size: 14px;
@@ -220,7 +220,7 @@
         <div class="file-input-wrapper">
             <!-- 加上 video/* 允許選取影片，multiple 允許選擇多個檔案 -->
             <input type="file" id="mainImage" accept="image/*,video/*" multiple>
-            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖/影片上傳，每個檔案大小請不要超過 30MB)</div>
+            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖/影片上傳，無前端容量限制)</div>
         </div>
         <button id="mainSubmitBtn" class="primary-btn" onclick="submitPost('', 'main')">發佈主串文</button>
     </div>
@@ -240,8 +240,11 @@
 </div>
 
 <script>
-    // 🔴 請將下方的網址替換成你的新版 Google Apps Script 部署網址
+    // ✅ 已套用你的 Web App URL
     const API_URL = "https://script.google.com/macros/s/AKfycbxnUvONekVx1YXHwFVgFv6v-TQFZqPUt0tIIuQ5kAsTo91RnJosX1gc70LhesmBzD-x/exec";
+
+    // 使用 sessionStorage 來記錄「這一次訪問網頁」發布的留言 ID
+    let mySessionPosts = JSON.parse(sessionStorage.getItem('mySessionPosts') || '[]');
 
     window.onload = function() { 
         loadPosts(); 
@@ -327,10 +330,17 @@
         }
 
         // 只有層級 1 和 2 可以回覆 (產生第 2 和第 3 層)
-        let replyButtonHtml = '';
+        let replyButtonHtml = depth < 3 ? `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>` : '';
+        // 如果這篇留言是「這次進入網頁時」所發布的，就顯示編輯按鈕
+        let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
+        
+        let actionBarHtml = '';
+        if (replyButtonHtml || editButtonHtml) {
+            actionBarHtml = `<div class="action-bar">${replyButtonHtml}${editButtonHtml}</div>`;
+        }
+        
         let replyFormHtml = '';
         if (depth < 3) {
-            replyButtonHtml = `<div class="action-bar"><button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button></div>`;
             replyFormHtml = `
                 <div class="reply-form-container" id="reply-form-${post.id}">
                     <div class="input-group">
@@ -348,6 +358,20 @@
             `;
         }
 
+        // 編輯留言的專屬隱藏表單
+        let editFormHtml = '';
+        if (mySessionPosts.includes(post.id)) {
+            editFormHtml = `
+                <div class="reply-form-container" id="edit-form-${post.id}">
+                    <div class="input-group">
+                        <textarea id="editContent-${post.id}" placeholder="修改留言內容...">${escapeHtml(post.content)}</textarea>
+                    </div>
+                    <button class="primary-btn" id="edit-btn-${post.id}" onclick="submitEdit('${post.id}')">儲存修改</button>
+                    <button class="primary-btn" style="background:#e0e0e0; color:#000; margin-top:8px;" onclick="toggleEditForm('${post.id}')">取消</button>
+                </div>
+            `;
+        }
+
         const coreContent = `
             <div class="post-header">
                 <span class="post-author">${escapeHtml(post.name)}</span>
@@ -355,8 +379,9 @@
             </div>
             <div class="post-content">${escapeHtml(post.content)}</div>
             ${galleryHtml}
-            ${replyButtonHtml}
+            ${actionBarHtml}
             ${replyFormHtml}
+            ${editFormHtml}
         `;
         
         wrapper.innerHTML = coreContent;
@@ -379,10 +404,59 @@
         if (form.classList.contains('active')) {
             form.classList.remove('active');
         } else {
-            // 自動帶入主表單的名字，免得一直重打
+            // 自動帶入主表單的名字
             const mainName = document.getElementById('mainName').value;
             if(mainName) document.getElementById(`replyName-${postId}`).value = mainName;
             form.classList.add('active');
+        }
+    }
+
+    // 展開/收合編輯表單
+    function toggleEditForm(postId) {
+        const form = document.getElementById(`edit-form-${postId}`);
+        if (form.classList.contains('active')) {
+            form.classList.remove('active');
+        } else {
+            form.classList.add('active');
+        }
+    }
+
+    // 送出編輯修改
+    async function submitEdit(postId) {
+        const newContent = document.getElementById(`editContent-${postId}`).value.trim();
+        const submitBtn = document.getElementById(`edit-btn-${postId}`);
+
+        if (!newContent) {
+            showMessage("留言內容不能為空喔！"); return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "儲存中...";
+
+        try {
+            const payload = {
+                action: "edit",
+                id: postId,
+                content: newContent
+            };
+
+            const response = await fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify(payload),
+                headers: { "Content-Type": "text/plain;charset=utf-8" } 
+            });
+
+            const result = await response.json();
+
+            if (result.status === "success") {
+                loadPosts(); // 重新載入畫面
+            } else {
+                showMessage("修改失敗：" + result.message);
+                submitBtn.disabled = false; submitBtn.innerText = "儲存修改";
+            }
+        } catch (error) {
+            showMessage("發生錯誤，請檢查網路。");
+            submitBtn.disabled = false; submitBtn.innerText = "儲存修改";
         }
     }
 
@@ -408,6 +482,19 @@
         lb.classList.remove('active');
     }
 
+    // 自訂訊息框 (用來取代傳統難看的 alert)
+    function showMessage(msg) {
+        const lb = document.getElementById('lightbox');
+        const content = lb.querySelector('.lightbox-content');
+        content.innerHTML = `
+            <div style="background:#fff; padding:24px; border-radius:12px; min-width:280px; text-align:center; color:#000; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <p style="font-size:16px; margin:0 0 20px 0;">${msg}</p>
+                <button class="primary-btn" onclick="closeLightbox()" style="width:auto; padding:8px 32px;">確定</button>
+            </div>
+        `;
+        lb.classList.add('active');
+    }
+
     // 統一發文函式 (處理主發文與回覆)
     async function submitPost(parentId, prefix) {
         let nameId, contentId, imageId, btnId;
@@ -425,7 +512,7 @@
         const submitBtn = document.getElementById(btnId);
 
         if (!nameInput || !contentInput) {
-            alert("請填寫名字和內容喔！"); return;
+            showMessage("請填寫名字和內容喔！"); return;
         }
 
         submitBtn.disabled = true;
@@ -436,7 +523,6 @@
             // 處理多個檔案轉換為 Base64
             for (let i = 0; i < imageFiles.length; i++) {
                 const file = imageFiles[i];
-                // 已經移除檔案大小的 5MB 限制
                 const base64 = await convertFileToBase64(file);
                 // 紀錄檔案的 type，以便後端與前端辨識是影片還是圖片
                 processedImages.push({ name: file.name, type: file.type, base64: base64 });
@@ -458,20 +544,25 @@
             const result = await response.json();
 
             if (result.status === "success") {
+                // 記錄自己的留言 ID (將新 ID 存入 sessionStorage)
+                if (result.id) {
+                    mySessionPosts.push(result.id);
+                    sessionStorage.setItem('mySessionPosts', JSON.stringify(mySessionPosts));
+                }
+
                 // 清空內容，保留名字
                 document.getElementById(contentId).value = '';
                 document.getElementById(imageId).value = '';
-                // 將名字同步到最上面，方便使用者
                 document.getElementById('mainName').value = nameInput;
                 
                 // 重新讀取畫面
                 loadPosts(); 
             } else {
-                alert("發佈失敗：" + result.message);
+                showMessage("發佈失敗：" + result.message);
                 submitBtn.disabled = false; submitBtn.innerText = "發佈";
             }
         } catch (error) {
-            alert("發生錯誤，請檢查網路或 API 網址設定。若上傳檔案過大可能導致超時錯誤。");
+            showMessage("發生錯誤，請檢查網路或 API 網址設定。若上傳檔案過大可能導致超時錯誤。");
             submitBtn.disabled = false; submitBtn.innerText = "發佈";
         }
     }
