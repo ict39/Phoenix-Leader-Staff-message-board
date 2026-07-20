@@ -24,6 +24,7 @@
             font-size: 24px;
             margin-bottom: 20px;
         }
+        
         /* 發文區塊樣式 */
         .post-form {
             background: #ffffff;
@@ -50,7 +51,8 @@
             min-height: 80px;
             font-family: inherit;
         }
-        /* 美化檔案上傳 */
+        
+        /* 檔案上傳與按鈕 */
         .file-input-wrapper {
             font-size: 14px;
             color: #666;
@@ -85,6 +87,7 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.02);
             position: relative;
         }
+        
         /* 子留言的縮排與左側連接線 */
         .reply-thread {
             margin-top: 12px;
@@ -116,20 +119,24 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
-        /* 多圖片網格樣式 */
+        
+        /* 圖片與影片的多檔案網格樣式 */
         .image-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 8px;
             margin-bottom: 12px;
         }
-        .post-image {
+        .post-media {
             width: 100%;
             height: 150px;
             object-fit: cover;
             border-radius: 8px;
             border: 1px solid #eee;
+            cursor: pointer; /* 提示可以點擊放大 */
+            background-color: #f0f0f0;
         }
+        
         /* 動作按鈕 (回覆) */
         .action-bar {
             display: flex;
@@ -158,6 +165,43 @@
         }
         .reply-form-container.active { display: block; }
         .loading { text-align: center; color: #888; padding: 20px; }
+
+        /* Lightbox 燈箱樣式 */
+        .lightbox {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox-content {
+            max-width: 90%;
+            max-height: 90%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .lightbox-content img, .lightbox-content video {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 40px;
+            cursor: pointer;
+            user-select: none;
+        }
     </style>
 </head>
 <body>
@@ -174,9 +218,9 @@
             <textarea id="mainContent" placeholder="建立新的串文... (必填)"></textarea>
         </div>
         <div class="file-input-wrapper">
-            <!-- 加上 multiple 屬性允許選取多張圖片 -->
-            <input type="file" id="mainImage" accept="image/*" multiple>
-            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖上傳，每張請小於 5MB)</div>
+            <!-- 加上 video/* 允許選取影片，multiple 允許選擇多個檔案 -->
+            <input type="file" id="mainImage" accept="image/*,video/*" multiple>
+            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖/影片上傳，無前端容量限制)</div>
         </div>
         <button id="mainSubmitBtn" class="primary-btn" onclick="submitPost('', 'main')">發佈主串文</button>
     </div>
@@ -187,16 +231,27 @@
     </div>
 </div>
 
+<!-- Lightbox 燈箱 HTML -->
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <div class="lightbox-content" onclick="event.stopPropagation()">
+        <!-- 圖片或影片會透過 JS 插入到這裡 -->
+    </div>
+</div>
+
 <script>
     // 🔴 請將下方的網址替換成你的新版 Google Apps Script 部署網址
     const API_URL = "https://script.google.com/macros/s/AKfycbxnUvONekVx1YXHwFVgFv6v-TQFZqPUt0tIIuQ5kAsTo91RnJosX1gc70LhesmBzD-x/exec";
 
-    window.onload = function() { loadPosts(); };
+    window.onload = function() { 
+        loadPosts(); 
+    };
 
     // 讀取並渲染留言
     async function loadPosts() {
         const feedDiv = document.getElementById('feed');
         try {
+            // 加入 redirect: "follow" 避免 CORS 重新導向問題
             const response = await fetch(API_URL, { redirect: "follow" });
             const result = await response.json();
 
@@ -241,7 +296,7 @@
     // 遞迴產生貼文 DOM 節點 (最多三層)
     function createPostNode(post, depth) {
         const wrapper = document.createElement('div');
-        // 主留言用卡片包裝，子留言則顯示為線程
+        // 主留言用卡片包裝，子留言則顯示為線程縮排
         if (depth === 1) {
             wrapper.className = 'post-card';
         } else {
@@ -251,12 +306,22 @@
         const dateObj = new Date(post.timestamp);
         const timeString = isNaN(dateObj) ? '' : dateObj.toLocaleString('zh-TW');
 
-        // 處理多圖片網格
+        // 處理多圖片/影片網格
         let galleryHtml = '';
         if (post.images && post.images.length > 0) {
             galleryHtml = '<div class="image-gallery">';
-            post.images.forEach(url => {
-                galleryHtml += `<img src="${url}" class="post-image" alt="附圖">`;
+            post.images.forEach(media => {
+                // 相容舊資料 (舊資料可能是純網址字串)
+                let url = typeof media === 'string' ? media : media.url;
+                let type = typeof media === 'string' ? 'image/png' : (media.type || 'image/png');
+                
+                if (type.startsWith('video/')) {
+                    // 影片設定自動播放、靜音、循環，並綁定燈箱開啟聲音
+                    galleryHtml += `<video src="${url}" class="post-media" autoplay muted loop playsinline onclick="openLightbox('${url}', '${type}')"></video>`;
+                } else {
+                    // 圖片綁定燈箱
+                    galleryHtml += `<img src="${url}" class="post-media" alt="附圖" onclick="openLightbox('${url}', '${type}')">`;
+                }
             });
             galleryHtml += '</div>';
         }
@@ -275,7 +340,8 @@
                         <textarea id="replyContent-${post.id}" placeholder="回覆 ${escapeHtml(post.name)}..."></textarea>
                     </div>
                     <div class="file-input-wrapper">
-                        <input type="file" id="replyImage-${post.id}" accept="image/*" multiple>
+                        <!-- 加上 video/* 允許選取影片 -->
+                        <input type="file" id="replyImage-${post.id}" accept="image/*,video/*" multiple>
                     </div>
                     <button class="primary-btn" id="btn-${post.id}" onclick="submitPost('${post.id}', 'reply-${post.id}')">送出回覆</button>
                 </div>
@@ -320,6 +386,28 @@
         }
     }
 
+    // 開啟燈箱 (Lightbox)
+    function openLightbox(url, type) {
+        const lb = document.getElementById('lightbox');
+        const content = lb.querySelector('.lightbox-content');
+        
+        if (type.startsWith('video/')) {
+            // 燈箱內的影片開啟聲音與控制條
+            content.innerHTML = `<video src="${url}" controls autoplay playsinline style="width:100%; max-height:90vh;"></video>`;
+        } else {
+            content.innerHTML = `<img src="${url}">`;
+        }
+        lb.classList.add('active');
+    }
+
+    // 關閉燈箱
+    function closeLightbox() {
+        const lb = document.getElementById('lightbox');
+        const content = lb.querySelector('.lightbox-content');
+        content.innerHTML = ''; // 清空內容，這能讓背景影片停止播放並釋放資源
+        lb.classList.remove('active');
+    }
+
     // 統一發文函式 (處理主發文與回覆)
     async function submitPost(parentId, prefix) {
         let nameId, contentId, imageId, btnId;
@@ -341,20 +429,17 @@
         }
 
         submitBtn.disabled = true;
-        submitBtn.innerText = "上傳發佈中...";
+        submitBtn.innerText = "上傳並發佈中(檔案較大時請耐心等候)...";
 
         try {
             let processedImages = [];
-            // 處理多檔案
+            // 處理多個檔案轉換為 Base64
             for (let i = 0; i < imageFiles.length; i++) {
                 const file = imageFiles[i];
-                if (file.size > 5 * 1024 * 1024) {
-                    alert(`圖片 ${file.name} 過大，請選擇小於 5MB 的圖片。`);
-                    submitBtn.disabled = false; submitBtn.innerText = "發佈";
-                    return;
-                }
+                // 已經移除檔案大小的 5MB 限制
                 const base64 = await convertFileToBase64(file);
-                processedImages.push({ name: file.name, base64: base64 });
+                // 紀錄檔案的 type，以便後端與前端辨識是影片還是圖片
+                processedImages.push({ name: file.name, type: file.type, base64: base64 });
             }
 
             const payload = {
@@ -386,12 +471,12 @@
                 submitBtn.disabled = false; submitBtn.innerText = "發佈";
             }
         } catch (error) {
-            alert("發生錯誤，請檢查網路或 API 網址設定。");
+            alert("發生錯誤，請檢查網路或 API 網址設定。若上傳檔案過大可能導致超時錯誤。");
             submitBtn.disabled = false; submitBtn.innerText = "發佈";
         }
     }
 
-    // 檔案轉 Base64
+    // 檔案轉 Base64 函式
     function convertFileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -401,8 +486,14 @@
         });
     }
 
+    // 防範 XSS 攻擊
     function escapeHtml(unsafe) {
-        return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 </script>
 
