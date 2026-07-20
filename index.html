@@ -130,7 +130,8 @@
         .post-media {
             width: 100%;
             height: 150px;
-            object-fit: cover;
+            /* 修正裁切問題：將 cover 改為 contain，保留完整圖片比例 */
+            object-fit: contain; 
             border-radius: 8px;
             border: 1px solid #eee;
             cursor: pointer; /* 提示可以點擊放大 */
@@ -181,13 +182,13 @@
         }
         .lightbox.active { display: flex; }
         .lightbox-content {
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 95%;
+            max-height: 95%;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        .lightbox-content img, .lightbox-content video {
+        .lightbox-content img {
             max-width: 100%;
             max-height: 90vh;
             border-radius: 8px;
@@ -201,6 +202,7 @@
             font-size: 40px;
             cursor: pointer;
             user-select: none;
+            z-index: 1001;
         }
     </style>
 </head>
@@ -319,10 +321,14 @@
                 let type = typeof media === 'string' ? 'image/png' : (media.type || 'image/png');
                 
                 if (type.startsWith('video/')) {
-                    // 影片設定自動播放、靜音、循環，並綁定燈箱開啟聲音
-                    galleryHtml += `<video src="${url}" class="post-media" autoplay muted loop playsinline onclick="openLightbox('${url}', '${type}')"></video>`;
+                    // 修正影片播放問題：在動態牆顯示帶有播放按鈕的質感縮圖，避免直接串流失敗
+                    galleryHtml += `
+                    <div class="post-media" style="position: relative; display: flex; align-items: center; justify-content: center; background-color: #000;" onclick="openLightbox('${url}', '${type}')">
+                        <img src="${url}" style="width: 100%; height: 100%; object-fit: contain; opacity: 0.5; position: absolute; top: 0; left: 0;" onerror="this.style.display='none'">
+                        <div style="font-size: 36px; z-index: 1; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">▶️</div>
+                    </div>`;
                 } else {
-                    // 圖片綁定燈箱
+                    // 圖片直接綁定燈箱
                     galleryHtml += `<img src="${url}" class="post-media" alt="附圖" onclick="openLightbox('${url}', '${type}')">`;
                 }
             });
@@ -460,14 +466,21 @@
         }
     }
 
-    // 開啟燈箱 (Lightbox)
+    // 💡 修正開啟燈箱 (Lightbox) 以支援 Google Drive 影片預覽
     function openLightbox(url, type) {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
         
-        if (type.startsWith('video/')) {
-            // 燈箱內的影片開啟聲音與控制條
-            content.innerHTML = `<video src="${url}" controls autoplay playsinline style="width:100%; max-height:90vh;"></video>`;
+        if (type && type.startsWith('video/')) {
+            // 提取檔案 ID 轉交給 Google Drive Preview 介面，這樣就能穩定載入影片不破圖
+            let fileId = "";
+            if (url.includes('/d/')) {
+                fileId = url.split('/d/')[1].split('/')[0];
+            } else {
+                fileId = url; // 預防舊資料格式例外
+            }
+            const iframeUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+            content.innerHTML = `<iframe src="${iframeUrl}" allow="autoplay; fullscreen" style="width: 85vw; height: 80vh; max-width: 900px; border: none; border-radius: 8px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);"></iframe>`;
         } else {
             content.innerHTML = `<img src="${url}">`;
         }
@@ -478,7 +491,7 @@
     function closeLightbox() {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
-        content.innerHTML = ''; // 清空內容，這能讓背景影片停止播放並釋放資源
+        content.innerHTML = ''; // 清空內容，這能讓背景 iframe 影片停止播放並釋放資源
         lb.classList.remove('active');
     }
 
