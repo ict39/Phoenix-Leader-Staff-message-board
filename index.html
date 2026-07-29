@@ -155,6 +155,23 @@
         }
         .reply-btn:hover { color: #000; }
         
+        /* 點讚按鈕專屬樣式 */
+        .like-btn {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .like-btn.liked { color: #ff3040; }
+        .like-btn:hover { color: #000; }
+        .like-btn.liked:hover { color: #e02433; }
+        
         /* 隱藏/展開的回覆表單 */
         .reply-form-container {
             display: none;
@@ -247,6 +264,8 @@
 
     // 使用 sessionStorage 來記錄「這一次訪問網頁」發布的留言 ID
     let mySessionPosts = JSON.parse(sessionStorage.getItem('mySessionPosts') || '[]');
+    // 使用 sessionStorage 紀錄「這一次訪問網頁」點過讚的留言 ID
+    let myLikedPosts = JSON.parse(sessionStorage.getItem('myLikedPosts') || '[]');
 
     window.onload = function() { 
         loadPosts(); 
@@ -321,11 +340,10 @@
                 let type = typeof media === 'string' ? 'image/png' : (media.type || 'image/png');
                 
                 if (type.startsWith('video/')) {
-                    // 修正影片播放問題：在動態牆顯示帶有播放按鈕的質感縮圖，避免直接串流失敗
+                    // 替換為 HTML5 video 標籤，並加上自動播放與靜音屬性
                     galleryHtml += `
                     <div class="post-media" style="position: relative; display: flex; align-items: center; justify-content: center; background-color: #000;" onclick="openLightbox('${url}', '${type}')">
-                        <img src="${url}" style="width: 100%; height: 100%; object-fit: contain; opacity: 0.5; position: absolute; top: 0; left: 0;" onerror="this.style.display='none'">
-                        <div style="font-size: 36px; z-index: 1; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">▶️</div>
+                        <video src="${url}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline></video>
                     </div>`;
                 } else {
                     // 圖片直接綁定燈箱
@@ -340,9 +358,15 @@
         // 如果這篇留言是「這次進入網頁時」所發布的，就顯示編輯按鈕
         let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
         
+        // 點讚按鈕處理
+        let isLiked = myLikedPosts.includes(post.id);
+        let likeIcon = isLiked ? '❤️' : '🤍';
+        let likeCount = post.likes || 0;
+        let likeButtonHtml = `<button class="like-btn ${isLiked ? 'liked' : ''}" id="like-btn-${post.id}" onclick="toggleLike('${post.id}')"><span id="like-icon-${post.id}">${likeIcon}</span> <span id="like-count-${post.id}">${likeCount}</span></button>`;
+        
         let actionBarHtml = '';
-        if (replyButtonHtml || editButtonHtml) {
-            actionBarHtml = `<div class="action-bar">${replyButtonHtml}${editButtonHtml}</div>`;
+        if (likeButtonHtml || replyButtonHtml || editButtonHtml) {
+            actionBarHtml = `<div class="action-bar">${likeButtonHtml}${replyButtonHtml}${editButtonHtml}</div>`;
         }
         
         let replyFormHtml = '';
@@ -358,6 +382,7 @@
                     <div class="file-input-wrapper">
                         <!-- 加上 video/* 允許選取影片 -->
                         <input type="file" id="replyImage-${post.id}" accept="image/*,video/*" multiple>
+                        <div style="font-size: 12px; margin-top: 4px; color: #888;">(影片上傳後，需要一段時間才可播放。)</div>
                     </div>
                     <button class="primary-btn" id="btn-${post.id}" onclick="submitPost('${post.id}', 'reply-${post.id}')">送出回覆</button>
                 </div>
@@ -424,6 +449,48 @@
             form.classList.remove('active');
         } else {
             form.classList.add('active');
+        }
+    }
+
+    // 點讚與取消讚功能
+    function toggleLike(postId) {
+        const likeBtn = document.getElementById(`like-btn-${postId}`);
+        const iconSpan = document.getElementById(`like-icon-${postId}`);
+        const countSpan = document.getElementById(`like-count-${postId}`);
+        
+        let isLiked = myLikedPosts.includes(postId);
+        let currentCount = parseInt(countSpan.innerText) || 0;
+        
+        // 1. 樂觀 UI 更新 (先切換畫面狀態，無需等待後端回應)
+        if (isLiked) {
+            myLikedPosts = myLikedPosts.filter(id => id !== postId);
+            iconSpan.innerText = '🤍';
+            likeBtn.classList.remove('liked');
+            countSpan.innerText = Math.max(0, currentCount - 1);
+        } else {
+            myLikedPosts.push(postId);
+            iconSpan.innerText = '❤️';
+            likeBtn.classList.add('liked');
+            countSpan.innerText = currentCount + 1;
+        }
+        
+        // 存入 sessionStorage 紀錄狀態
+        sessionStorage.setItem('myLikedPosts', JSON.stringify(myLikedPosts));
+        
+        // 2. 背景發送請求給後端進行資料庫增減
+        try {
+            const payload = {
+                action: isLiked ? "unlike" : "like",
+                id: postId
+            };
+
+            fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify(payload),
+                headers: { "Content-Type": "text/plain;charset=utf-8" } 
+            });
+        } catch (error) {
+            console.error("按讚狀態同步失敗", error);
         }
     }
 
