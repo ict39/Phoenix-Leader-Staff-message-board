@@ -184,6 +184,32 @@
         .reply-form-container.active { display: block; }
         .loading { text-align: center; color: #888; padding: 20px; }
 
+        /* 新增：上方控制列 (搜尋與排序) */
+        .controls-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .controls-bar input, .controls-bar select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        .controls-bar input { flex: 1; }
+        
+        /* 新增：展開/收合按鈕 */
+        .expand-btn {
+            color: #007bff;
+            cursor: pointer;
+            font-size: 13px;
+            margin-top: 8px;
+            font-weight: bold;
+            padding-left: 16px;
+        }
+        .expand-btn:hover { text-decoration: underline; }
+
         /* Lightbox 燈箱樣式 */
         .lightbox {
             display: none;
@@ -244,6 +270,17 @@
         <button id="mainSubmitBtn" class="primary-btn" onclick="submitPost('', 'main')">發佈主串文</button>
     </div>
 
+    <!-- 新增：控制列 (搜尋與排序) -->
+    <div class="controls-bar">
+        <input type="text" id="searchInput" placeholder="🔍 搜尋貼文內容或發文者..." oninput="renderFeed()">
+        <select id="sortSelect" onchange="renderFeed()">
+            <option value="timeDesc">時間：由新到舊</option>
+            <option value="timeAsc">時間：由舊到新</option>
+            <option value="likesDesc">按讚數：最多</option>
+            <option value="repliesDesc">留言數：最多</option>
+        </select>
+    </div>
+
     <!-- 留言列表區塊 -->
     <div id="feed" class="feed">
         <div class="loading">載入留言中...</div>
@@ -266,40 +303,84 @@
     let mySessionPosts = JSON.parse(sessionStorage.getItem('mySessionPosts') || '[]');
     // 使用 sessionStorage 紀錄「這一次訪問網頁」點過讚的留言 ID
     let myLikedPosts = JSON.parse(sessionStorage.getItem('myLikedPosts') || '[]');
+    
+    // 新增：用來儲存所有原始貼文資料，方便不重新連線就能搜尋與排序
+    let allRawPosts = [];
 
     window.onload = function() { 
         loadPosts(); 
     };
 
-    // 讀取並渲染留言
+    // 讀取留言
     async function loadPosts() {
         const feedDiv = document.getElementById('feed');
         try {
-            // 加入 redirect: "follow" 避免 CORS 重新導向問題
             const response = await fetch(API_URL, { redirect: "follow" });
             const result = await response.json();
 
             if (result.status === "success") {
-                const posts = result.data;
-                if (posts.length === 0) {
-                    feedDiv.innerHTML = '<div class="loading">目前還沒有人發文，搶頭香吧！</div>';
-                    return;
-                }
-                
-                // 1. 將平坦的資料轉換為樹狀結構 (找出主串與其回覆)
-                const tree = buildTree(posts);
-                // 2. 渲染樹狀結構
-                feedDiv.innerHTML = '';
-                // 將主串文倒序排列 (最新的在最上面)
-                tree.reverse().forEach(post => {
-                    feedDiv.appendChild(createPostNode(post, 1));
-                });
+                allRawPosts = result.data;
+                renderFeed(); // 取得資料後交由 renderFeed 進行排序與渲染
             } else {
                 feedDiv.innerHTML = `<div class="loading">讀取失敗：${result.message}</div>`;
             }
         } catch (error) {
-            feedDiv.innerHTML = '<div class="loading">網路錯誤或尚未設定後端網址。</div>';
+            console.error("載入留言發生錯誤:", error);
+            feedDiv.innerHTML = '<div class="loading">載入失敗，請按 F12 檢查 Console 的錯誤訊息。</div>';
         }
+    }
+
+    // 🌟 新增：重新渲染留言板 (包含搜尋、排序、樹狀轉換)
+    function renderFeed() {
+        const feedDiv = document.getElementById('feed');
+        if (allRawPosts.length === 0) {
+            feedDiv.innerHTML = '<div class="loading">目前還沒有人發文，搶頭香吧！</div>';
+            return;
+        }
+
+        let tree = buildTree(allRawPosts);
+        const searchText = document.getElementById('searchInput').value.trim().toLowerCase();
+        const sortOrder = document.getElementById('sortSelect').value;
+
+        // 1. 執行搜尋過濾
+        if (searchText) {
+            tree = tree.filter(post => filterPostTree(post, searchText));
+        }
+
+        // 2. 執行第一層排序
+        tree.sort((a, b) => {
+            if (sortOrder === 'timeDesc') return new Date(b.timestamp) - new Date(a.timestamp);
+            if (sortOrder === 'timeAsc') return new Date(a.timestamp) - new Date(b.timestamp);
+            if (sortOrder === 'likesDesc') return (b.likes || 0) - (a.likes || 0);
+            if (sortOrder === 'repliesDesc') return countAllReplies(b) - countAllReplies(a);
+            return 0;
+        });
+
+        feedDiv.innerHTML = '';
+        tree.forEach(post => {
+            feedDiv.appendChild(createPostNode(post, 1));
+        });
+    }
+
+    // 新增：遞迴搜尋貼文及子留言
+    function filterPostTree(post, searchText) {
+        const matchCurrent = (post.name && post.name.toLowerCase().includes(searchText)) || 
+                             (post.content && post.content.toLowerCase().includes(searchText));
+        
+        let matchChildren = false;
+        if (post.children && post.children.length > 0) {
+            post.children = post.children.filter(child => filterPostTree(child, searchText));
+            if (post.children.length > 0) matchChildren = true;
+        }
+        return matchCurrent || matchChildren;
+    }
+
+    // 新增：計算某貼文底下所有的總留言數
+    function countAllReplies(post) {
+        if (!post.children) return 0;
+        let count = post.children.length;
+        post.children.forEach(child => count += countAllReplies(child));
+        return count;
     }
 
     // 建立樹狀結構的演算法
@@ -332,18 +413,24 @@
 
         // 處理多圖片/影片網格
         let galleryHtml = '';
-        if (post.images && post.images.length > 0) {
+        // ✅ 修正：多加一個 Array.isArray 檢查，防止資料異常時當機
+        if (post.images && Array.isArray(post.images) && post.images.length > 0) {
             galleryHtml = '<div class="image-gallery">';
             post.images.forEach(media => {
+                if (!media) return; // ✅ 修正：防止遇到 null 的圖片資料
                 // 相容舊資料 (舊資料可能是純網址字串)
                 let url = typeof media === 'string' ? media : media.url;
                 let type = typeof media === 'string' ? 'image/png' : (media.type || 'image/png');
                 
                 if (type.startsWith('video/')) {
+                    // 🔥 修正影片自動播放：改用 Drive 直接下載連結 (uc?export=download) 以突破 Google 阻擋
+                    let fileId = url.includes('/d/') ? url.split('/d/')[1].split('/')[0] : url;
+                    let directVideoUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
                     // 替換為 HTML5 video 標籤，並加上自動播放與靜音屬性
                     galleryHtml += `
                     <div class="post-media" style="position: relative; display: flex; align-items: center; justify-content: center; background-color: #000;" onclick="openLightbox('${url}', '${type}')">
-                        <video src="${url}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline></video>
+                        <video src="${directVideoUrl}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline></video>
                     </div>`;
                 } else {
                     // 圖片直接綁定燈箱
@@ -420,9 +507,51 @@
         // 若有子留言，遞迴渲染並接在下方
         if (post.children && post.children.length > 0) {
             const childrenWrapper = document.createElement('div');
-            post.children.forEach(child => {
-                childrenWrapper.appendChild(createPostNode(child, depth + 1));
-            });
+            
+            // 🔥 新增：第一層留言若有多個回覆，預設只顯示最熱門的一個
+            if (depth === 1 && post.children.length > 1) {
+                // 依據 (按讚數 + 子留言數) 來尋找最熱門的回覆
+                const sortedChildren = [...post.children].sort((a, b) => {
+                    const scoreA = (a.likes || 0) + countAllReplies(a);
+                    const scoreB = (b.likes || 0) + countAllReplies(b);
+                    return scoreB - scoreA;
+                });
+
+                const topChild = sortedChildren[0];
+                const restChildren = sortedChildren.slice(1);
+
+                // 渲染最熱門的那一則
+                childrenWrapper.appendChild(createPostNode(topChild, depth + 1));
+
+                // 將其他回覆放入隱藏容器
+                const hiddenWrapper = document.createElement('div');
+                hiddenWrapper.style.display = 'none';
+                restChildren.forEach(child => {
+                    hiddenWrapper.appendChild(createPostNode(child, depth + 1));
+                });
+                childrenWrapper.appendChild(hiddenWrapper);
+
+                // 加入「展開/收合」按鈕
+                const toggleBtn = document.createElement('div');
+                toggleBtn.className = 'expand-btn';
+                toggleBtn.innerText = `— 展開其餘 ${restChildren.length} 則回覆`;
+                toggleBtn.onclick = () => {
+                    if (hiddenWrapper.style.display === 'none') {
+                        hiddenWrapper.style.display = 'block';
+                        toggleBtn.innerText = `— 收合回覆`;
+                    } else {
+                        hiddenWrapper.style.display = 'none';
+                        toggleBtn.innerText = `— 展開其餘 ${restChildren.length} 則回覆`;
+                    }
+                };
+                childrenWrapper.appendChild(toggleBtn);
+            } else {
+                // 原本的預設渲染邏輯 (第二層以下，或只有一個回覆時)
+                post.children.forEach(child => {
+                    childrenWrapper.appendChild(createPostNode(child, depth + 1));
+                });
+            }
+            
             wrapper.appendChild(childrenWrapper);
         }
 
