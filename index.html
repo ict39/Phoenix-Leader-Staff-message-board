@@ -181,7 +181,15 @@
             border-radius: 8px;
             font-size: 14px;
             background-color: #fff;
+            box-sizing: border-box;
+        }
+        .controls-bar input {
+            flex: 3;
+            min-width: 0;
+        }
+        .controls-bar select {
             flex: 1;
+            min-width: 0;
         }
         .expand-btn {
             color: #007bff;
@@ -381,7 +389,17 @@
         posts.forEach(p => { map[p.id] = { ...p, children: [] }; });
         posts.forEach(p => {
             if (p.parentId && map[p.parentId]) {
-                map[p.parentId].children.push(map[p.id]);
+                // 尋找最上層的主串文 (Root)
+                let root = map[p.parentId];
+                let parentNode = map[p.parentId];
+                while (root.parentId && map[root.parentId]) {
+                    root = map[root.parentId];
+                }
+                // 若回覆的是子留言而非主串文，標記被回覆者姓名
+                if (p.parentId !== root.id && parentNode) {
+                    map[p.id].replyToName = parentNode.name;
+                }
+                root.children.push(map[p.id]);
             } else {
                 roots.push(map[p.id]);
             }
@@ -424,8 +442,8 @@
             galleryHtml += '</div>';
         }
 
-        // 限定兩層留言 (只有第一層顯示回覆按鈕)
-        let replyButtonHtml = depth < 2 ? `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>` : '';
+        // 所有留言（包含第二層）皆可回覆
+        let replyButtonHtml = `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>`;
         let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
         let deleteButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" style="color: #ff3040;" onclick="deletePost('${post.id}')">刪除</button>` : '';
         let shareButtonHtml = `<button class="reply-btn" onclick="sharePost('${post.id}')">🔗 複製連結</button>`;
@@ -440,24 +458,21 @@
             actionBarHtml = `<div class="action-bar">${likeButtonHtml}${replyButtonHtml}${editButtonHtml}${deleteButtonHtml}${shareButtonHtml}</div>`;
         }
         
-        let replyFormHtml = '';
-        if (depth < 2) {
-            replyFormHtml = `
-                <div class="reply-form-container" id="reply-form-${post.id}">
-                    <div class="input-group">
-                        <input type="text" id="replyName-${post.id}" placeholder="你的名字">
-                    </div>
-                    <div class="input-group">
-                        <textarea id="replyContent-${post.id}" placeholder="回覆 ${escapeHtml(post.name)}..."></textarea>
-                    </div>
-                    <div class="file-input-wrapper">
-                        <input type="file" id="replyImage-${post.id}" accept="image/*,video/*" multiple>
-                        <div style="font-size: 12px; margin-top: 4px; color: #888;">(影片上傳後，需要一段時間才可播放。)</div>
-                    </div>
-                    <button class="primary-btn" id="btn-${post.id}" onclick="submitPost('${post.id}', 'reply-${post.id}')">送出回覆</button>
+        let replyFormHtml = `
+            <div class="reply-form-container" id="reply-form-${post.id}">
+                <div class="input-group">
+                    <input type="text" id="replyName-${post.id}" placeholder="你的名字">
                 </div>
-            `;
-        }
+                <div class="input-group">
+                    <textarea id="replyContent-${post.id}" placeholder="回覆 ${escapeHtml(post.name)}..."></textarea>
+                </div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="replyImage-${post.id}" accept="image/*,video/*" multiple>
+                    <div style="font-size: 12px; margin-top: 4px; color: #888;">(影片上傳後，需要一段時間才可播放。)</div>
+                </div>
+                <button class="primary-btn" id="btn-${post.id}" onclick="submitPost('${post.id}', 'reply-${post.id}')">送出回覆</button>
+            </div>
+        `;
 
         let editFormHtml = '';
         if (mySessionPosts.includes(post.id)) {
@@ -472,9 +487,13 @@
             `;
         }
 
+        const replyToHtml = post.replyToName 
+            ? `<span style="font-weight:normal; color:#666; font-size:13px; margin-left:4px;">▸ 回覆 ${escapeHtml(post.replyToName)}</span>` 
+            : '';
+
         const coreContent = `
             <div class="post-header">
-                <span class="post-author">${escapeHtml(post.name)}</span>
+                <span class="post-author">${escapeHtml(post.name)}${replyToHtml}</span>
                 <span class="post-time">${timeString}</span>
             </div>
             ${post.title && depth === 1 ? `<div class="post-title">${escapeHtml(post.title)}</div>` : ''}
