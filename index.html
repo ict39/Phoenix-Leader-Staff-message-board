@@ -256,6 +256,10 @@
 
     <!-- 主發文表單 -->
     <div class="post-form">
+        <!-- 新增：標題輸入框 -->
+        <div class="input-group">
+            <input type="text" id="mainTitle" placeholder="文章標題 (主串文必填)">
+        </div>
         <div class="input-group">
             <input type="text" id="mainName" placeholder="你的名字 (必填)">
         </div>
@@ -360,6 +364,20 @@
         tree.forEach(post => {
             feedDiv.appendChild(createPostNode(post, 1));
         });
+
+        // 新增：處理 URL Hash 錨點跳轉 (超連結直接定位貼文)
+        setTimeout(() => {
+            if (window.location.hash) {
+                const target = document.querySelector(window.location.hash);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // 加上短暫的高亮發光效果，讓使用者知道是哪一篇
+                    target.style.boxShadow = "0 0 0 4px #007bff";
+                    target.style.transition = "box-shadow 0.5s";
+                    setTimeout(() => { target.style.boxShadow = "0 2px 10px rgba(0,0,0,0.02)"; }, 2500);
+                }
+            }
+        }, 300); // 延遲一下讓圖片有時間渲染
     }
 
     // 新增：遞迴搜尋貼文及子留言
@@ -401,6 +419,9 @@
     // 遞迴產生貼文 DOM 節點 (最多三層)
     function createPostNode(post, depth) {
         const wrapper = document.createElement('div');
+        // 新增：為每個貼文綁定唯一的 ID 錨點，以便 URL 跳轉
+        wrapper.id = `post-${post.id}`;
+
         // 主留言用卡片包裝，子留言則顯示為線程縮排
         if (depth === 1) {
             wrapper.className = 'post-card';
@@ -444,6 +465,10 @@
         let replyButtonHtml = depth < 3 ? `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>` : '';
         // 如果這篇留言是「這次進入網頁時」所發布的，就顯示編輯按鈕
         let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
+        // 新增：刪除按鈕
+        let deleteButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" style="color: #ff3040;" onclick="deletePost('${post.id}')">刪除</button>` : '';
+        // 新增：分享連結按鈕
+        let shareButtonHtml = `<button class="reply-btn" onclick="sharePost('${post.id}')">🔗 複製連結</button>`;
         
         // 點讚按鈕處理
         let isLiked = myLikedPosts.includes(post.id);
@@ -452,8 +477,8 @@
         let likeButtonHtml = `<button class="like-btn ${isLiked ? 'liked' : ''}" id="like-btn-${post.id}" onclick="toggleLike('${post.id}')"><span id="like-icon-${post.id}">${likeIcon}</span> <span id="like-count-${post.id}">${likeCount}</span></button>`;
         
         let actionBarHtml = '';
-        if (likeButtonHtml || replyButtonHtml || editButtonHtml) {
-            actionBarHtml = `<div class="action-bar">${likeButtonHtml}${replyButtonHtml}${editButtonHtml}</div>`;
+        if (likeButtonHtml || replyButtonHtml || editButtonHtml || deleteButtonHtml || shareButtonHtml) {
+            actionBarHtml = `<div class="action-bar">${likeButtonHtml}${replyButtonHtml}${editButtonHtml}${deleteButtonHtml}${shareButtonHtml}</div>`;
         }
         
         let replyFormHtml = '';
@@ -495,6 +520,7 @@
                 <span class="post-author">${escapeHtml(post.name)}</span>
                 <span class="post-time">${timeString}</span>
             </div>
+            ${post.title && depth === 1 ? `<div style="font-weight: bold; font-size: 18px; margin-bottom: 8px;">${escapeHtml(post.title)}</div>` : ''}
             <div class="post-content">${escapeHtml(post.content)}</div>
             ${galleryHtml}
             ${actionBarHtml}
@@ -579,6 +605,57 @@
         } else {
             form.classList.add('active');
         }
+    }
+
+    // 新增：自訂確認刪除視窗
+    function showConfirm(msg, onConfirm) {
+        const lb = document.getElementById('lightbox');
+        const content = lb.querySelector('.lightbox-content');
+        content.innerHTML = `
+            <div style="background:#fff; padding:24px; border-radius:12px; min-width:280px; text-align:center; color:#000; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <p style="font-size:16px; margin:0 0 20px 0;">${msg}</p>
+                <div style="display:flex; justify-content:center; gap:12px;">
+                    <button class="primary-btn" id="confirm-btn-yes" style="width:auto; padding:8px 32px; background:#ff3040;">確定刪除</button>
+                    <button class="primary-btn" id="confirm-btn-no" style="width:auto; padding:8px 32px; background:#e0e0e0; color:#000;">取消</button>
+                </div>
+            </div>
+        `;
+        document.getElementById('confirm-btn-yes').onclick = () => { closeLightbox(); onConfirm(); };
+        document.getElementById('confirm-btn-no').onclick = () => { closeLightbox(); };
+        lb.classList.add('active');
+    }
+
+    // 新增：刪除留言功能
+    function deletePost(postId) {
+        showConfirm("確定要刪除這篇留言嗎？刪除後無法恢復喔！", async () => {
+            try {
+                const payload = { action: "delete", id: postId };
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                    headers: { "Content-Type": "text/plain;charset=utf-8" } 
+                });
+                const result = await response.json();
+                if (result.status === "success") {
+                    loadPosts(); // 重新載入畫面
+                } else {
+                    showMessage("刪除失敗：" + result.message);
+                }
+            } catch (error) {
+                showMessage("發生錯誤，請檢查網路。");
+            }
+        });
+    }
+
+    // 新增：複製單篇貼文專屬連結
+    function sharePost(postId) {
+        // 清除網址列原本可能有的舊 Hash，加上新 Hash
+        const url = window.location.origin + window.location.pathname + "#post-" + postId;
+        navigator.clipboard.writeText(url).then(() => {
+            showMessage("✅ 專屬網址已複製！你可以貼給其他人了。");
+        }).catch(() => {
+            showMessage("❌ 複製失敗，請手動複製網址並在最後面加上 #post-" + postId);
+        });
     }
 
     // 點讚與取消讚功能
@@ -706,22 +783,24 @@
 
     // 統一發文函式 (處理主發文與回覆)
     async function submitPost(parentId, prefix) {
-        let nameId, contentId, imageId, btnId;
+        let nameId, contentId, imageId, btnId, titleId;
         
         // 判斷是主發文還是回覆
         if (prefix === 'main') {
-            nameId = 'mainName'; contentId = 'mainContent'; imageId = 'mainImage'; btnId = 'mainSubmitBtn';
+            titleId = 'mainTitle'; nameId = 'mainName'; contentId = 'mainContent'; imageId = 'mainImage'; btnId = 'mainSubmitBtn';
         } else {
             nameId = `replyName-${parentId}`; contentId = `replyContent-${parentId}`; imageId = `replyImage-${parentId}`; btnId = `btn-${parentId}`;
         }
 
+        const titleInput = titleId ? document.getElementById(titleId).value.trim() : '';
         const nameInput = document.getElementById(nameId).value.trim();
         const contentInput = document.getElementById(contentId).value.trim();
         const imageFiles = document.getElementById(imageId).files;
         const submitBtn = document.getElementById(btnId);
 
-        if (!nameInput || !contentInput) {
-            showMessage("請填寫名字和內容喔！"); return;
+        // 主發文需要標題、名字、內容；回覆只需要名字、內容
+        if (!nameInput || !contentInput || (prefix === 'main' && !titleInput)) {
+            showMessage("請確認標題、名字和內容都有填寫喔！"); return;
         }
 
         submitBtn.disabled = true;
@@ -739,6 +818,7 @@
 
             const payload = {
                 parentId: parentId,
+                title: titleInput,
                 name: nameInput,
                 content: contentInput,
                 images: processedImages
@@ -760,19 +840,30 @@
                 }
 
                 // 清空內容，保留名字
+                if(titleId) document.getElementById(titleId).value = '';
                 document.getElementById(contentId).value = '';
                 document.getElementById(imageId).value = '';
                 document.getElementById('mainName').value = nameInput;
                 
                 // 重新讀取畫面
                 loadPosts(); 
+
+                // 🔥 修正：發佈成功後，確實將按鈕文字恢復原狀
+                submitBtn.disabled = false; 
+                submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
             } else {
                 showMessage("發佈失敗：" + result.message);
-                submitBtn.disabled = false; submitBtn.innerText = "發佈";
+                
+                // 🔥 修正：發佈失敗後，確實將按鈕文字恢復原狀
+                submitBtn.disabled = false; 
+                submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
             }
         } catch (error) {
             showMessage("發生錯誤，請檢查網路或 API 網址設定。若上傳檔案過大可能導致超時錯誤。");
-            submitBtn.disabled = false; submitBtn.innerText = "發佈";
+            
+            // 🔥 修正：發生錯誤後，確實將按鈕文字恢復原狀
+            submitBtn.disabled = false; 
+            submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
         }
     }
 
