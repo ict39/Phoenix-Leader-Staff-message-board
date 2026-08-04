@@ -350,7 +350,12 @@
             feedDiv.appendChild(createPostNode(post, 1));
         });
 
+        // 修正：影片自動播放，在元素繪製後手動呼叫 .play() 以突破瀏覽器限制
         setTimeout(() => {
+            document.querySelectorAll('#feed video').forEach(v => {
+                v.muted = true;
+                v.play().catch(e => console.log("影片自動播放受瀏覽器阻擋:", e));
+            });
             if (window.location.hash) {
                 const target = document.querySelector(window.location.hash);
                 if (target) {
@@ -383,23 +388,14 @@
         return count;
     }
 
+    // 恢復多層次樹狀結構（第 2 層可回覆為第 3 層，依此類推）
     function buildTree(posts) {
         const map = {};
         const roots = [];
         posts.forEach(p => { map[p.id] = { ...p, children: [] }; });
         posts.forEach(p => {
             if (p.parentId && map[p.parentId]) {
-                // 尋找最上層的主串文 (Root)
-                let root = map[p.parentId];
-                let parentNode = map[p.parentId];
-                while (root.parentId && map[root.parentId]) {
-                    root = map[root.parentId];
-                }
-                // 若回覆的是子留言而非主串文，標記被回覆者姓名
-                if (p.parentId !== root.id && parentNode) {
-                    map[p.id].replyToName = parentNode.name;
-                }
-                root.children.push(map[p.id]);
+                map[p.parentId].children.push(map[p.id]);
             } else {
                 roots.push(map[p.id]);
             }
@@ -430,10 +426,11 @@
                 
                 if (type.startsWith('video/')) {
                     let fileId = url.includes('/d/') ? url.split('/d/')[1].split('/')[0] : url;
-                    let directVideoUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                    // 使用 lh3 或串流網址播放影片，避免 uc?export=download 下載阻擋
+                    let directVideoUrl = url.startsWith('http') ? url : `https://lh3.googleusercontent.com/d/${fileId}`;
                     galleryHtml += `
                     <div class="post-media" style="position: relative; display: flex; align-items: center; justify-content: center; background-color: #000;" onclick="openLightbox('${url}', '${type}')">
-                        <video src="${directVideoUrl}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline></video>
+                        <video src="${directVideoUrl}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline preload="auto"></video>
                     </div>`;
                 } else {
                     galleryHtml += `<img src="${url}" class="post-media" alt="附圖" onclick="openLightbox('${url}', '${type}')">`;
@@ -442,7 +439,6 @@
             galleryHtml += '</div>';
         }
 
-        // 所有留言（包含第二層）皆可回覆
         let replyButtonHtml = `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>`;
         let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
         let deleteButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" style="color: #ff3040;" onclick="deletePost('${post.id}')">刪除</button>` : '';
@@ -487,13 +483,9 @@
             `;
         }
 
-        const replyToHtml = post.replyToName 
-            ? `<span style="font-weight:normal; color:#666; font-size:13px; margin-left:4px;">▸ 回覆 ${escapeHtml(post.replyToName)}</span>` 
-            : '';
-
         const coreContent = `
             <div class="post-header">
-                <span class="post-author">${escapeHtml(post.name)}${replyToHtml}</span>
+                <span class="post-author">${escapeHtml(post.name)}</span>
                 <span class="post-time">${timeString}</span>
             </div>
             ${post.title && depth === 1 ? `<div class="post-title">${escapeHtml(post.title)}</div>` : ''}
