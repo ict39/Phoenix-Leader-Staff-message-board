@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>留言交流平台</title>
     <style>
-        /* 基礎全域設定 */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #fafafa;
@@ -24,8 +23,7 @@
             font-size: 24px;
             margin-bottom: 20px;
         }
-        
-        /* 發文區塊樣式 */
+
         .post-form {
             background: #ffffff;
             border: 1px solid #e0e0e0;
@@ -45,6 +43,11 @@
             font-size: 15px;
             box-sizing: border-box;
             background-color: #f9f9f9;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus {
+            border-color: #000;
+            outline: none;
         }
         textarea {
             resize: vertical;
@@ -52,7 +55,6 @@
             font-family: inherit;
         }
 
-        /* 檔案上傳與按鈕 */
         .file-input-wrapper {
             font-size: 14px;
             color: #666;
@@ -72,8 +74,7 @@
         }
         button.primary-btn:hover { opacity: 0.8; }
         button.primary-btn:disabled { background-color: #cccccc; cursor: not-allowed; }
-        
-        /* 留言列表區塊樣式 - Threads 風格 */
+
         .feed {
             display: flex;
             flex-direction: column;
@@ -87,8 +88,6 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.02);
             position: relative;
         }
-        
-        /* 子留言的縮排與左側連接線 */
         .reply-thread {
             margin-top: 12px;
             margin-left: 12px;
@@ -112,6 +111,11 @@
             font-size: 12px;
             color: #888;
         }
+        .post-title {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
         .post-content {
             font-size: 15px;
             line-height: 1.5;
@@ -119,8 +123,7 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
-        
-        /* 圖片與影片的多檔案網格樣式 */
+
         .image-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -130,19 +133,17 @@
         .post-media {
             width: 100%;
             height: 150px;
-            /* 修正裁切問題：將 cover 改為 contain，保留完整圖片比例 */
             object-fit: contain; 
             border-radius: 8px;
             border: 1px solid #eee;
-            cursor: pointer; /* 提示可以點擊放大 */
+            cursor: pointer;
             background-color: #f0f0f0;
         }
-        
-        /* 動作按鈕 (回覆) */
         .action-bar {
             display: flex;
             gap: 16px;
             margin-bottom: 8px;
+            flex-wrap: wrap;
         }
         .reply-btn {
             background: none;
@@ -154,8 +155,6 @@
             padding: 0;
         }
         .reply-btn:hover { color: #000; }
-        
-        /* 點讚按鈕專屬樣式 */
         .like-btn {
             background: none;
             border: none;
@@ -170,21 +169,7 @@
         }
         .like-btn.liked { color: #ff3040; }
         .like-btn:hover { color: #000; }
-        .like-btn.liked:hover { color: #e02433; }
-        
-        /* 隱藏/展開的回覆表單 */
-        .reply-form-container {
-            display: none;
-            margin-top: 12px;
-            background: #f9f9f9;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #eee;
-        }
-        .reply-form-container.active { display: block; }
-        .loading { text-align: center; color: #888; padding: 20px; }
 
-        /* 新增：上方控制列 (搜尋與排序) */
         .controls-bar {
             display: flex;
             gap: 12px;
@@ -196,10 +181,8 @@
             border-radius: 8px;
             font-size: 14px;
             background-color: #fff;
+            flex: 1;
         }
-        .controls-bar input { flex: 1; }
-        
-        /* 新增：展開/收合按鈕 */
         .expand-btn {
             color: #007bff;
             cursor: pointer;
@@ -209,8 +192,17 @@
             padding-left: 16px;
         }
         .expand-btn:hover { text-decoration: underline; }
+        .reply-form-container {
+            display: none;
+            margin-top: 12px;
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+        .reply-form-container.active { display: block; }
+        .loading { text-align: center; color: #888; padding: 20px; }
 
-        /* Lightbox 燈箱樣式 */
         .lightbox {
             display: none;
             position: fixed;
@@ -231,7 +223,7 @@
             justify-content: center;
             align-items: center;
         }
-        .lightbox-content img {
+        .lightbox-content img, .lightbox-content video {
             max-width: 100%;
             max-height: 90vh;
             border-radius: 8px;
@@ -254,9 +246,7 @@
 <div class="container">
     <h1>討論區</h1>
 
-    <!-- 主發文表單 -->
     <div class="post-form">
-        <!-- 新增：標題輸入框 -->
         <div class="input-group">
             <input type="text" id="mainTitle" placeholder="文章標題 (主串文必填)">
         </div>
@@ -267,14 +257,13 @@
             <textarea id="mainContent" placeholder="建立新的串文... (必填)"></textarea>
         </div>
         <div class="file-input-wrapper">
-            <!-- 加上 video/* 允許選取影片，multiple 允許選擇多個檔案 -->
             <input type="file" id="mainImage" accept="image/*,video/*" multiple>
-            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖/影片上傳，無前端容量限制)</div>
+            <div style="font-size: 12px; margin-top: 4px; color: #888;">(支援多圖/影片上傳，無前端容量限制。影片上傳需處理時間。)</div>
         </div>
         <button id="mainSubmitBtn" class="primary-btn" onclick="submitPost('', 'main')">發佈主串文</button>
     </div>
 
-    <!-- 新增：控制列 (搜尋與排序) -->
+    <!-- 控制列 (搜尋與排序) -->
     <div class="controls-bar">
         <input type="text" id="searchInput" placeholder="🔍 搜尋貼文內容或發文者..." oninput="renderFeed()">
         <select id="sortSelect" onchange="renderFeed()">
@@ -285,37 +274,28 @@
         </select>
     </div>
 
-    <!-- 留言列表區塊 -->
     <div id="feed" class="feed">
         <div class="loading">載入留言中...</div>
     </div>
 </div>
 
-<!-- Lightbox 燈箱 HTML -->
 <div id="lightbox" class="lightbox" onclick="closeLightbox()">
     <span class="lightbox-close">&times;</span>
     <div class="lightbox-content" onclick="event.stopPropagation()">
-        <!-- 圖片或影片會透過 JS 插入到這裡 -->
     </div>
 </div>
 
 <script>
-    // ✅ 已套用你的 Web App URL
     const API_URL = "https://script.google.com/macros/s/AKfycbxnUvONekVx1YXHwFVgFv6v-TQFZqPUt0tIIuQ5kAsTo91RnJosX1gc70LhesmBzD-x/exec";
 
-    // 使用 sessionStorage 來記錄「這一次訪問網頁」發布的留言 ID
     let mySessionPosts = JSON.parse(sessionStorage.getItem('mySessionPosts') || '[]');
-    // 使用 sessionStorage 紀錄「這一次訪問網頁」點過讚的留言 ID
     let myLikedPosts = JSON.parse(sessionStorage.getItem('myLikedPosts') || '[]');
-    
-    // 新增：用來儲存所有原始貼文資料，方便不重新連線就能搜尋與排序
     let allRawPosts = [];
 
     window.onload = function() { 
         loadPosts(); 
     };
 
-    // 讀取留言
     async function loadPosts() {
         const feedDiv = document.getElementById('feed');
         try {
@@ -324,17 +304,16 @@
 
             if (result.status === "success") {
                 allRawPosts = result.data;
-                renderFeed(); // 取得資料後交由 renderFeed 進行排序與渲染
+                renderFeed(); 
             } else {
                 feedDiv.innerHTML = `<div class="loading">讀取失敗：${result.message}</div>`;
             }
         } catch (error) {
             console.error("載入留言發生錯誤:", error);
-            feedDiv.innerHTML = '<div class="loading">載入失敗，請按 F12 檢查 Console 的錯誤訊息。</div>';
+            feedDiv.innerHTML = '<div class="loading">載入失敗，請按 F12 檢查 Console 錯誤訊息。</div>';
         }
     }
 
-    // 🌟 新增：重新渲染留言板 (包含搜尋、排序、樹狀轉換)
     function renderFeed() {
         const feedDiv = document.getElementById('feed');
         if (allRawPosts.length === 0) {
@@ -346,12 +325,10 @@
         const searchText = document.getElementById('searchInput').value.trim().toLowerCase();
         const sortOrder = document.getElementById('sortSelect').value;
 
-        // 1. 執行搜尋過濾
         if (searchText) {
             tree = tree.filter(post => filterPostTree(post, searchText));
         }
 
-        // 2. 執行第一層排序
         tree.sort((a, b) => {
             if (sortOrder === 'timeDesc') return new Date(b.timestamp) - new Date(a.timestamp);
             if (sortOrder === 'timeAsc') return new Date(a.timestamp) - new Date(b.timestamp);
@@ -365,24 +342,22 @@
             feedDiv.appendChild(createPostNode(post, 1));
         });
 
-        // 新增：處理 URL Hash 錨點跳轉 (超連結直接定位貼文)
         setTimeout(() => {
             if (window.location.hash) {
                 const target = document.querySelector(window.location.hash);
                 if (target) {
                     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // 加上短暫的高亮發光效果，讓使用者知道是哪一篇
                     target.style.boxShadow = "0 0 0 4px #007bff";
                     target.style.transition = "box-shadow 0.5s";
                     setTimeout(() => { target.style.boxShadow = "0 2px 10px rgba(0,0,0,0.02)"; }, 2500);
                 }
             }
-        }, 300); // 延遲一下讓圖片有時間渲染
+        }, 300); 
     }
 
-    // 新增：遞迴搜尋貼文及子留言
     function filterPostTree(post, searchText) {
         const matchCurrent = (post.name && post.name.toLowerCase().includes(searchText)) || 
+                             (post.title && post.title.toLowerCase().includes(searchText)) ||
                              (post.content && post.content.toLowerCase().includes(searchText));
         
         let matchChildren = false;
@@ -393,7 +368,6 @@
         return matchCurrent || matchChildren;
     }
 
-    // 新增：計算某貼文底下所有的總留言數
     function countAllReplies(post) {
         if (!post.children) return 0;
         let count = post.children.length;
@@ -401,7 +375,6 @@
         return count;
     }
 
-    // 建立樹狀結構的演算法
     function buildTree(posts) {
         const map = {};
         const roots = [];
@@ -416,13 +389,10 @@
         return roots;
     }
 
-    // 遞迴產生貼文 DOM 節點 (最多三層)
     function createPostNode(post, depth) {
         const wrapper = document.createElement('div');
-        // 新增：為每個貼文綁定唯一的 ID 錨點，以便 URL 跳轉
         wrapper.id = `post-${post.id}`;
 
-        // 主留言用卡片包裝，子留言則顯示為線程縮排
         if (depth === 1) {
             wrapper.className = 'post-card';
         } else {
@@ -432,45 +402,34 @@
         const dateObj = new Date(post.timestamp);
         const timeString = isNaN(dateObj) ? '' : dateObj.toLocaleString('zh-TW');
 
-        // 處理多圖片/影片網格
         let galleryHtml = '';
-        // ✅ 修正：多加一個 Array.isArray 檢查，防止資料異常時當機
         if (post.images && Array.isArray(post.images) && post.images.length > 0) {
             galleryHtml = '<div class="image-gallery">';
             post.images.forEach(media => {
-                if (!media) return; // ✅ 修正：防止遇到 null 的圖片資料
-                // 相容舊資料 (舊資料可能是純網址字串)
+                if (!media) return; 
                 let url = typeof media === 'string' ? media : media.url;
                 let type = typeof media === 'string' ? 'image/png' : (media.type || 'image/png');
                 
                 if (type.startsWith('video/')) {
-                    // 🔥 修正影片自動播放：改用 Drive 直接下載連結 (uc?export=download) 以突破 Google 阻擋
                     let fileId = url.includes('/d/') ? url.split('/d/')[1].split('/')[0] : url;
                     let directVideoUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-
-                    // 替換為 HTML5 video 標籤，並加上自動播放與靜音屬性
                     galleryHtml += `
                     <div class="post-media" style="position: relative; display: flex; align-items: center; justify-content: center; background-color: #000;" onclick="openLightbox('${url}', '${type}')">
                         <video src="${directVideoUrl}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;" autoplay muted loop playsinline></video>
                     </div>`;
                 } else {
-                    // 圖片直接綁定燈箱
                     galleryHtml += `<img src="${url}" class="post-media" alt="附圖" onclick="openLightbox('${url}', '${type}')">`;
                 }
             });
             galleryHtml += '</div>';
         }
 
-        // 只有層級 1 和 2 可以回覆 (產生第 2 和第 3 層)
-        let replyButtonHtml = depth < 3 ? `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>` : '';
-        // 如果這篇留言是「這次進入網頁時」所發布的，就顯示編輯按鈕
+        // 限定兩層留言 (只有第一層顯示回覆按鈕)
+        let replyButtonHtml = depth < 2 ? `<button class="reply-btn" onclick="toggleReplyForm('${post.id}')">回覆</button>` : '';
         let editButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" onclick="toggleEditForm('${post.id}')">編輯</button>` : '';
-        // 新增：刪除按鈕
         let deleteButtonHtml = mySessionPosts.includes(post.id) ? `<button class="reply-btn" style="color: #ff3040;" onclick="deletePost('${post.id}')">刪除</button>` : '';
-        // 新增：分享連結按鈕
         let shareButtonHtml = `<button class="reply-btn" onclick="sharePost('${post.id}')">🔗 複製連結</button>`;
         
-        // 點讚按鈕處理
         let isLiked = myLikedPosts.includes(post.id);
         let likeIcon = isLiked ? '❤️' : '🤍';
         let likeCount = post.likes || 0;
@@ -482,7 +441,7 @@
         }
         
         let replyFormHtml = '';
-        if (depth < 3) {
+        if (depth < 2) {
             replyFormHtml = `
                 <div class="reply-form-container" id="reply-form-${post.id}">
                     <div class="input-group">
@@ -492,7 +451,6 @@
                         <textarea id="replyContent-${post.id}" placeholder="回覆 ${escapeHtml(post.name)}..."></textarea>
                     </div>
                     <div class="file-input-wrapper">
-                        <!-- 加上 video/* 允許選取影片 -->
                         <input type="file" id="replyImage-${post.id}" accept="image/*,video/*" multiple>
                         <div style="font-size: 12px; margin-top: 4px; color: #888;">(影片上傳後，需要一段時間才可播放。)</div>
                     </div>
@@ -501,7 +459,6 @@
             `;
         }
 
-        // 編輯留言的專屬隱藏表單
         let editFormHtml = '';
         if (mySessionPosts.includes(post.id)) {
             editFormHtml = `
@@ -520,7 +477,7 @@
                 <span class="post-author">${escapeHtml(post.name)}</span>
                 <span class="post-time">${timeString}</span>
             </div>
-            ${post.title && depth === 1 ? `<div style="font-weight: bold; font-size: 18px; margin-bottom: 8px;">${escapeHtml(post.title)}</div>` : ''}
+            ${post.title && depth === 1 ? `<div class="post-title">${escapeHtml(post.title)}</div>` : ''}
             <div class="post-content">${escapeHtml(post.content)}</div>
             ${galleryHtml}
             ${actionBarHtml}
@@ -530,13 +487,10 @@
         
         wrapper.innerHTML = coreContent;
 
-        // 若有子留言，遞迴渲染並接在下方
         if (post.children && post.children.length > 0) {
             const childrenWrapper = document.createElement('div');
             
-            // 🔥 新增：第一層留言若有多個回覆，預設只顯示最熱門的一個
             if (depth === 1 && post.children.length > 1) {
-                // 依據 (按讚數 + 子留言數) 來尋找最熱門的回覆
                 const sortedChildren = [...post.children].sort((a, b) => {
                     const scoreA = (a.likes || 0) + countAllReplies(a);
                     const scoreB = (b.likes || 0) + countAllReplies(b);
@@ -546,10 +500,8 @@
                 const topChild = sortedChildren[0];
                 const restChildren = sortedChildren.slice(1);
 
-                // 渲染最熱門的那一則
                 childrenWrapper.appendChild(createPostNode(topChild, depth + 1));
 
-                // 將其他回覆放入隱藏容器
                 const hiddenWrapper = document.createElement('div');
                 hiddenWrapper.style.display = 'none';
                 restChildren.forEach(child => {
@@ -557,7 +509,6 @@
                 });
                 childrenWrapper.appendChild(hiddenWrapper);
 
-                // 加入「展開/收合」按鈕
                 const toggleBtn = document.createElement('div');
                 toggleBtn.className = 'expand-btn';
                 toggleBtn.innerText = `— 展開其餘 ${restChildren.length} 則回覆`;
@@ -572,7 +523,6 @@
                 };
                 childrenWrapper.appendChild(toggleBtn);
             } else {
-                // 原本的預設渲染邏輯 (第二層以下，或只有一個回覆時)
                 post.children.forEach(child => {
                     childrenWrapper.appendChild(createPostNode(child, depth + 1));
                 });
@@ -584,20 +534,17 @@
         return wrapper;
     }
 
-    // 展開/收合回覆表單
     function toggleReplyForm(postId) {
         const form = document.getElementById(`reply-form-${postId}`);
         if (form.classList.contains('active')) {
             form.classList.remove('active');
         } else {
-            // 自動帶入主表單的名字
             const mainName = document.getElementById('mainName').value;
             if(mainName) document.getElementById(`replyName-${postId}`).value = mainName;
             form.classList.add('active');
         }
     }
 
-    // 展開/收合編輯表單
     function toggleEditForm(postId) {
         const form = document.getElementById(`edit-form-${postId}`);
         if (form.classList.contains('active')) {
@@ -607,7 +554,6 @@
         }
     }
 
-    // 新增：自訂確認刪除視窗
     function showConfirm(msg, onConfirm) {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
@@ -615,7 +561,7 @@
             <div style="background:#fff; padding:24px; border-radius:12px; min-width:280px; text-align:center; color:#000; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
                 <p style="font-size:16px; margin:0 0 20px 0;">${msg}</p>
                 <div style="display:flex; justify-content:center; gap:12px;">
-                    <button class="primary-btn" id="confirm-btn-yes" style="width:auto; padding:8px 32px; background:#ff3040;">確定刪除</button>
+                    <button class="primary-btn" id="confirm-btn-yes" style="width:auto; padding:8px 32px; background:#ff3040;">確定</button>
                     <button class="primary-btn" id="confirm-btn-no" style="width:auto; padding:8px 32px; background:#e0e0e0; color:#000;">取消</button>
                 </div>
             </div>
@@ -625,7 +571,6 @@
         lb.classList.add('active');
     }
 
-    // 新增：刪除留言功能
     function deletePost(postId) {
         showConfirm("確定要刪除這篇留言嗎？刪除後無法恢復喔！", async () => {
             try {
@@ -637,7 +582,7 @@
                 });
                 const result = await response.json();
                 if (result.status === "success") {
-                    loadPosts(); // 重新載入畫面
+                    setTimeout(loadPosts, 500); 
                 } else {
                     showMessage("刪除失敗：" + result.message);
                 }
@@ -647,9 +592,7 @@
         });
     }
 
-    // 新增：複製單篇貼文專屬連結
     function sharePost(postId) {
-        // 清除網址列原本可能有的舊 Hash，加上新 Hash
         const url = window.location.origin + window.location.pathname + "#post-" + postId;
         navigator.clipboard.writeText(url).then(() => {
             showMessage("✅ 專屬網址已複製！你可以貼給其他人了。");
@@ -658,7 +601,6 @@
         });
     }
 
-    // 點讚與取消讚功能
     function toggleLike(postId) {
         const likeBtn = document.getElementById(`like-btn-${postId}`);
         const iconSpan = document.getElementById(`like-icon-${postId}`);
@@ -667,7 +609,6 @@
         let isLiked = myLikedPosts.includes(postId);
         let currentCount = parseInt(countSpan.innerText) || 0;
         
-        // 1. 樂觀 UI 更新 (先切換畫面狀態，無需等待後端回應)
         if (isLiked) {
             myLikedPosts = myLikedPosts.filter(id => id !== postId);
             iconSpan.innerText = '🤍';
@@ -680,16 +621,10 @@
             countSpan.innerText = currentCount + 1;
         }
         
-        // 存入 sessionStorage 紀錄狀態
         sessionStorage.setItem('myLikedPosts', JSON.stringify(myLikedPosts));
         
-        // 2. 背景發送請求給後端進行資料庫增減
         try {
-            const payload = {
-                action: isLiked ? "unlike" : "like",
-                id: postId
-            };
-
+            const payload = { action: isLiked ? "unlike" : "like", id: postId };
             fetch(API_URL, {
                 method: "POST",
                 body: JSON.stringify(payload),
@@ -700,7 +635,6 @@
         }
     }
 
-    // 送出編輯修改
     async function submitEdit(postId) {
         const newContent = document.getElementById(`editContent-${postId}`).value.trim();
         const submitBtn = document.getElementById(`edit-btn-${postId}`);
@@ -713,12 +647,7 @@
         submitBtn.innerText = "儲存中...";
 
         try {
-            const payload = {
-                action: "edit",
-                id: postId,
-                content: newContent
-            };
-
+            const payload = { action: "edit", id: postId, content: newContent };
             const response = await fetch(API_URL, {
                 method: "POST",
                 body: JSON.stringify(payload),
@@ -726,9 +655,8 @@
             });
 
             const result = await response.json();
-
             if (result.status === "success") {
-                loadPosts(); // 重新載入畫面
+                setTimeout(loadPosts, 500); 
             } else {
                 showMessage("修改失敗：" + result.message);
                 submitBtn.disabled = false; submitBtn.innerText = "儲存修改";
@@ -739,19 +667,12 @@
         }
     }
 
-    // 💡 修正開啟燈箱 (Lightbox) 以支援 Google Drive 影片預覽
     function openLightbox(url, type) {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
         
         if (type && type.startsWith('video/')) {
-            // 提取檔案 ID 轉交給 Google Drive Preview 介面，這樣就能穩定載入影片不破圖
-            let fileId = "";
-            if (url.includes('/d/')) {
-                fileId = url.split('/d/')[1].split('/')[0];
-            } else {
-                fileId = url; // 預防舊資料格式例外
-            }
+            let fileId = url.includes('/d/') ? url.split('/d/')[1].split('/')[0] : url;
             const iframeUrl = `https://drive.google.com/file/d/${fileId}/preview`;
             content.innerHTML = `<iframe src="${iframeUrl}" allow="autoplay; fullscreen" style="width: 85vw; height: 80vh; max-width: 900px; border: none; border-radius: 8px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);"></iframe>`;
         } else {
@@ -760,15 +681,13 @@
         lb.classList.add('active');
     }
 
-    // 關閉燈箱
     function closeLightbox() {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
-        content.innerHTML = ''; // 清空內容，這能讓背景 iframe 影片停止播放並釋放資源
+        content.innerHTML = ''; 
         lb.classList.remove('active');
     }
 
-    // 自訂訊息框 (用來取代傳統難看的 alert)
     function showMessage(msg) {
         const lb = document.getElementById('lightbox');
         const content = lb.querySelector('.lightbox-content');
@@ -781,11 +700,9 @@
         lb.classList.add('active');
     }
 
-    // 統一發文函式 (處理主發文與回覆)
     async function submitPost(parentId, prefix) {
         let nameId, contentId, imageId, btnId, titleId;
         
-        // 判斷是主發文還是回覆
         if (prefix === 'main') {
             titleId = 'mainTitle'; nameId = 'mainName'; contentId = 'mainContent'; imageId = 'mainImage'; btnId = 'mainSubmitBtn';
         } else {
@@ -797,8 +714,8 @@
         const contentInput = document.getElementById(contentId).value.trim();
         const imageFiles = document.getElementById(imageId).files;
         const submitBtn = document.getElementById(btnId);
+        const originalBtnText = prefix === 'main' ? "發佈主串文" : "送出回覆";
 
-        // 主發文需要標題、名字、內容；回覆只需要名字、內容
         if (!nameInput || !contentInput || (prefix === 'main' && !titleInput)) {
             showMessage("請確認標題、名字和內容都有填寫喔！"); return;
         }
@@ -808,11 +725,9 @@
 
         try {
             let processedImages = [];
-            // 處理多個檔案轉換為 Base64
             for (let i = 0; i < imageFiles.length; i++) {
                 const file = imageFiles[i];
                 const base64 = await convertFileToBase64(file);
-                // 紀錄檔案的 type，以便後端與前端辨識是影片還是圖片
                 processedImages.push({ name: file.name, type: file.type, base64: base64 });
             }
 
@@ -833,41 +748,28 @@
             const result = await response.json();
 
             if (result.status === "success") {
-                // 記錄自己的留言 ID (將新 ID 存入 sessionStorage)
                 if (result.id) {
                     mySessionPosts.push(result.id);
                     sessionStorage.setItem('mySessionPosts', JSON.stringify(mySessionPosts));
                 }
 
-                // 清空內容，保留名字
                 if(titleId) document.getElementById(titleId).value = '';
                 document.getElementById(contentId).value = '';
                 document.getElementById(imageId).value = '';
                 document.getElementById('mainName').value = nameInput;
                 
-                // 重新讀取畫面
-                loadPosts(); 
-
-                // 🔥 修正：發佈成功後，確實將按鈕文字恢復原狀
-                submitBtn.disabled = false; 
-                submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
+                setTimeout(loadPosts, 500); 
             } else {
                 showMessage("發佈失敗：" + result.message);
-                
-                // 🔥 修正：發佈失敗後，確實將按鈕文字恢復原狀
-                submitBtn.disabled = false; 
-                submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
             }
         } catch (error) {
             showMessage("發生錯誤，請檢查網路或 API 網址設定。若上傳檔案過大可能導致超時錯誤。");
-            
-            // 🔥 修正：發生錯誤後，確實將按鈕文字恢復原狀
+        } finally {
             submitBtn.disabled = false; 
-            submitBtn.innerText = prefix === 'main' ? "發佈主串文" : "送出回覆";
+            submitBtn.innerText = originalBtnText;
         }
     }
 
-    // 檔案轉 Base64 函式
     function convertFileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -877,7 +779,6 @@
         });
     }
 
-    // 防範 XSS 攻擊
     function escapeHtml(unsafe) {
         return unsafe
             .replace(/&/g, "&amp;")
