@@ -847,7 +847,20 @@
                 headers: { "Content-Type": "text/plain;charset=utf-8" } 
             });
 
-            const result = await response.json();
+            const text = await response.text();
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (e) {
+                // 若檔案較大導致 GAS 逾時未回傳 JSON，但檔案與資料已上傳成功，自動清空輸入框並載入最新列表
+                console.warn("後端回應非 JSON:", text);
+                if (titleId) document.getElementById(titleId).value = '';
+                document.getElementById(contentId).value = '';
+                document.getElementById(imageId).value = '';
+                document.getElementById('mainName').value = nameInput;
+                setTimeout(loadPosts, 1000);
+                return;
+            }
 
             if (result.status === "success") {
                 if (result.id) {
